@@ -245,7 +245,7 @@ for i, x in enumerate( all_data ):
     all_embeddings[ fr:to ] = encoder.predict(x[0])
 
 print('saving embeddings')
-np.savetxt(f"{run_shortname}_embeddings.csv", all_embeddings, delimiter="\t")
+np.savetxt(f"{run_shortname}_{latent_dim}_embeddings.csv", all_embeddings, delimiter="\t")
 
 # Also save out the SKUs so we can visualise with the tensorflow embedding visualiser
 
