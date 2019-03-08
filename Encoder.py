@@ -29,9 +29,9 @@ args = parser.parse_args()
 
 # In[2]:
 # for interactive running
-path = 'data/4_SuppliesShipment (filtered).xlsx'
-name = 'Toner Part No. (SKU)'
-batch_size = 10000
+path = './9_TonerYield.xlsx'
+name = 'HW SKU Description'
+batch_size = 100
 seq_length =  10
 num_epochs = 1
 latent_dim = 5
@@ -121,13 +121,20 @@ def pad(iterable, size, padding=None):
 def chunker(seq, size):
     return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
+def is_float(value):
+  try:
+    float(value)
+    return True
+  except:
+    return False
+
 def GetBatch(df, token_map, batchsize=5):
     
     while True:
         c = chunker(range(overall_count), batchsize)
         
         for chunk in c:
-            
+
             X = list( df[list(chunk)] )                 \
                 | select( lambda l: list(str(str(l).lower()))                     \
                 | select( lambda t: token_map_inv[t] ) | as_list )                 \
@@ -136,10 +143,25 @@ def GetBatch(df, token_map, batchsize=5):
             
             X = to_categorical( np.array( X ), num_classes=len(token_map))
 
+            F = list( df[list(chunk)] ) \
+                | select( lambda l: list(l) \
+                    | select(lambda y: float(y)/10 if is_float(y) else 0) \
+                    | as_list ) \
+                | select( lambda l: pad(l, size=seq_length, padding=0 ) | as_list ) \
+                | as_list 
+
+            F = np.array( F )
+            
             # let's be a bit clever here and add an additional float for tokens \in {0,1,..9}
-        
+            # so it can learn
+            # it's an ordinal albeit in a sequence, it should then be able to learn
+            # to count
+            X_bigger = np.zeros((len(chunk),seq_length,len(token_map)+1))
+            X_bigger[:,:,0:len(token_map)] = X
+            X_bigger[:,:,len(token_map)] = F
+
             # yield same thing twice because the label is the same as the signal
-            yield (X,X)
+            yield (X_bigger,X_bigger)
 
 # In[9]:
 
@@ -147,12 +169,12 @@ def GetBatch(df, token_map, batchsize=5):
 num_encoder_tokens = len(token_map)
 
 model = Sequential()
-model.add(Bidirectional(LSTM(latent_dim, activation='relu', input_shape=(seq_length, num_encoder_tokens))))
+model.add(Bidirectional(LSTM(latent_dim, activation='relu'), input_shape=(seq_length, num_encoder_tokens+1)))
 model.add(RepeatVector(seq_length))
 model.add(Bidirectional(LSTM(latent_dim, activation='relu', return_sequences=True)))
-model.add(TimeDistributed(Dense(30)))
-model.add(TimeDistributed(Dense(15)))
-model.add(TimeDistributed(Dense(num_encoder_tokens)))
+model.add(TimeDistributed(Dense(latent_dim*2)))
+model.add(TimeDistributed(Dense(latent_dim)))
+model.add(TimeDistributed(Dense(num_encoder_tokens+1)))
 
 data_gen = GetBatch(
     sheet[name], 
@@ -203,7 +225,7 @@ all_data = GetBatch(
     token_map, 
     batchsize=batch_size)
 
-all_embeddings = np.zeros( ( overall_count, latent_dim )  )
+all_embeddings = np.zeros( ( overall_count, latent_dim*2 )  )
 
 print('one-hot encode all data and predict in batches')
 
