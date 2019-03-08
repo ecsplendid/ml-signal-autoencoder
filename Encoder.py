@@ -128,9 +128,14 @@ def is_float(value):
   except:
     return False
 
-def GetBatch(df, token_map, batchsize=5):
+def GetBatch(df, token_map, batchsize=5, cycle=True):
     
-    while True:
+    cycle_mode = True
+
+    while cycle_mode:
+
+        if(not cycle): cycle_mode = False
+
         c = chunker(range(overall_count), batchsize)
         
         for chunk in c:
@@ -223,7 +228,8 @@ model.save(f'{run_shortname}_encoder.h5')
 all_data = GetBatch(
     sheet[name], 
     token_map, 
-    batchsize=batch_size)
+    batchsize=batch_size,
+    cycle=False)
 
 all_embeddings = np.zeros( ( overall_count, latent_dim*2 )  )
 
@@ -235,9 +241,6 @@ for i, x in enumerate( all_data ):
     to = ([(i*batch_size)+batch_size, overall_count] | min)
 
     print(f'batch {i} ({fr}=>{to})')
-
-    if fr>=overall_count:
-        break
 
     all_embeddings[ fr:to ] = encoder.predict(x[0])
 
@@ -255,7 +258,13 @@ labels_all = list( sheet[name].values )   \
 | select( lambda x: (str(x).lower() ) )     \
 | as_list
 
+
+
+print(f'Labels count: {labels_all | count}')
+
 with open(f"{run_shortname}_labels.csv",'w', encoding="utf-8") as resultFile:
     
     for item in labels_all:
-        resultFile.write(f"{item}\n")
+        nobreak = item.replace('\n', '').replace('\r', '')
+
+        resultFile.write(f"{nobreak}\n")
